@@ -5,7 +5,7 @@ import os
 import random
 
 # ==========================================
-# 1. 設定とファイルのパス（クラウド対応のため相対パスに変更）
+# 1. 設定とファイルのパス
 # ==========================================
 EXCEL_PATH = "test_center.xlsx"
 PROGRESS_FILE = "progress.json"
@@ -13,7 +13,7 @@ PROGRESS_FILE = "progress.json"
 st.set_page_config(page_title="テストセンター対策アプリ", layout="wide")
 
 # ==========================================
-# 学習記録の管理（バックアップ対応）
+# 学習記録の管理
 # ==========================================
 def load_progress():
     if os.path.exists(PROGRESS_FILE):
@@ -29,7 +29,7 @@ def save_progress(progress):
         with open(PROGRESS_FILE, 'w', encoding='utf-8') as f:
             json.dump(progress, f, ensure_ascii=False, indent=2)
     except:
-        pass # クラウド環境での書き込みエラー回避
+        pass
 
 if 'progress' not in st.session_state:
     st.session_state.progress = load_progress()
@@ -166,36 +166,44 @@ def main():
     category = st.sidebar.radio("項目を選択", list(all_data.keys()), index=list(all_data.keys()).index(default_cat))
     filter_mode = st.sidebar.radio("出題モード", ["通常（順番通り）", "ランダム出題", "未学習のみ", "自信なしと未学習のみ"], index=["通常（順番通り）", "ランダム出題", "未学習のみ", "自信なしと未学習のみ"].index(default_mode))
     
-    # クラウドでのデータ消失を防ぐバックアップ機能
+    # バックアップ機能
     st.sidebar.divider()
     st.sidebar.subheader("💾 学習履歴の引き継ぎ")
-    st.sidebar.caption("※クラウド上では時間が経つと履歴がリセットされるため、定期的にダウンロードして保存してください。")
+    st.sidebar.caption("※定期的にダウンロードして保存してください。")
     
     progress_json = json.dumps(st.session_state.progress, ensure_ascii=False, indent=2)
     st.sidebar.download_button("履歴をダウンロード", data=progress_json, file_name="progress_backup.json", mime="application/json")
     
     # ------------------------------------------
-    # ★ 修正ポイント: 履歴アップロード時のリセット・更新処理
+    # ★ 修正：ファイルアップロード & 完全リセット処理
     # ------------------------------------------
-    uploaded_file = st.sidebar.file_uploader("履歴をアップロード（復元）", type=["json"])
+    uploaded_file = st.sidebar.file_uploader("履歴をアップロード（復元）", type=["json"], key="json_uploader")
     if uploaded_file is not None:
         file_id = f"{uploaded_file.name}_{uploaded_file.size}"
         if st.session_state.get("last_uploaded_file") != file_id:
             try:
-                # 1. 履歴データをセッションとファイルに反映
                 uploaded_progress = json.load(uploaded_file)
-                st.session_state.progress = uploaded_progress
-                save_progress(uploaded_progress)
                 
-                # 2. 生成済みの出題リストを消去して再計算させる
-                st.session_state.state_manager = {}
-                st.session_state.last_uploaded_file = file_id
-                
-                # 3. 画面を再描画
-                st.sidebar.success("復元しました！")
-                st.rerun()
+                # データ形式のチェック
+                if isinstance(uploaded_progress, dict):
+                    st.session_state.progress = uploaded_progress
+                    save_progress(uploaded_progress)
+                    
+                    # 出題管理とURLパラメータを完全にリセット
+                    st.session_state.state_manager = {}
+                    st.session_state.last_uploaded_file = file_id
+                    st.query_params.clear()  # URLの idx をクリアして1問目に戻す
+                    
+                    st.sidebar.success(f"復元完了！（{len(uploaded_progress)}件の記録）")
+                    st.rerun()
+                else:
+                    st.sidebar.error("無効なJSONフォーマットです。")
             except Exception as e:
-                st.sidebar.error("ファイルの読み込みに失敗しました。")
+                st.sidebar.error(f"読み込み失敗: {e}")
+
+    # 現在の記録件数をサイドバーに表示（確認用）
+    learned_count = sum(1 for v in st.session_state.progress.values() if v.get("learned"))
+    st.sidebar.info(f"📊 読み込み中の履歴: 全 {len(st.session_state.progress)} 件（学習済み {learned_count} 件）")
 
     state_key = f"{category}_{filter_mode}"
 
@@ -217,7 +225,7 @@ def main():
 
         st.session_state.state_manager[state_key] = {
             "playlist": filtered_q,
-            "idx": default_idx if state_key == f"{default_cat}_{default_mode}" else 0
+            "idx": 0  # 確実に1問目からスタートさせる
         }
         st.session_state.show_ans = False
 
@@ -232,9 +240,7 @@ def main():
     playlist = playlist_info["playlist"]
     idx = playlist_info["idx"]
 
-    # ------------------------------------------
-    # 現在の状態をURLパラメータに保存（F5リロード対策）
-    # ------------------------------------------
+    # 現在の状態をURLパラメータに保存
     st.query_params["cat"] = category
     st.query_params["mode"] = filter_mode
     st.query_params["idx"] = str(idx)
@@ -255,7 +261,7 @@ def main():
     q_id = q_data["id"]
     status = get_status(q_id)
 
-    st.write(f"**進捗:** {idx+1} / {len(playlist)} 問目  |  現在の状態: {'🟢学習済み' if status['learned'] else '🔴未学習'} / {'🟢自信あり' if status['confident'] else '🔴自信なし'}")
+    st.write(f"**進捗:** {idx+1} / {len(playlist)} 問目  |  ID: `{q_id}`  |  現在の状態: {'🟢学習済み' if status['learned'] else '🔴未学習'} / {'🟢自信あり' if status['confident'] else '🔴自信なし'}")
     st.divider()
 
     st.subheader("問題")
