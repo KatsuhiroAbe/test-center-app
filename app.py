@@ -174,14 +174,28 @@ def main():
     progress_json = json.dumps(st.session_state.progress, ensure_ascii=False, indent=2)
     st.sidebar.download_button("履歴をダウンロード", data=progress_json, file_name="progress_backup.json", mime="application/json")
     
+    # ------------------------------------------
+    # ★ 修正ポイント: 履歴アップロード時のリセット・更新処理
+    # ------------------------------------------
     uploaded_file = st.sidebar.file_uploader("履歴をアップロード（復元）", type=["json"])
     if uploaded_file is not None:
-        try:
-            st.session_state.progress = json.load(uploaded_file)
-            save_progress(st.session_state.progress)
-            st.sidebar.success("復元しました！")
-        except:
-            st.sidebar.error("ファイルの読み込みに失敗しました。")
+        file_id = f"{uploaded_file.name}_{uploaded_file.size}"
+        if st.session_state.get("last_uploaded_file") != file_id:
+            try:
+                # 1. 履歴データをセッションとファイルに反映
+                uploaded_progress = json.load(uploaded_file)
+                st.session_state.progress = uploaded_progress
+                save_progress(uploaded_progress)
+                
+                # 2. 生成済みの出題リストを消去して再計算させる
+                st.session_state.state_manager = {}
+                st.session_state.last_uploaded_file = file_id
+                
+                # 3. 画面を再描画
+                st.sidebar.success("復元しました！")
+                st.rerun()
+            except Exception as e:
+                st.sidebar.error("ファイルの読み込みに失敗しました。")
 
     state_key = f"{category}_{filter_mode}"
 
