@@ -249,6 +249,29 @@ def main():
         st.info("該当する問題がありません！すべて学習済みか自信ありになっています。")
         return
 
+    # 🌟🌟🌟 今回追加するジャンプ機能 🌟🌟🌟
+    st.sidebar.divider()
+    st.sidebar.subheader("🚀 問題ジャンプ")
+    
+    # 現在のインデックスがリストの長さを超えないように調整（エラー防止）
+    current_q_num = min(idx + 1, len(playlist)) 
+    
+    jump_target = st.sidebar.number_input(
+        f"問題番号 (1〜{len(playlist)})", 
+        min_value=1, 
+        max_value=len(playlist), 
+        value=current_q_num,
+        step=1
+    )
+    
+    if st.sidebar.button("この問題から始める", use_container_width=True, type="secondary"):
+        # 入力された番号 - 1 をインデックスとして設定
+        st.session_state.state_manager[state_key]["idx"] = jump_target - 1
+        st.session_state.show_ans = False
+        st.query_params["idx"] = str(jump_target - 1)
+        st.rerun()
+    # 🌟🌟🌟 ここまで 🌟🌟🌟
+    
     if idx >= len(playlist):
         st.success("この出題セットの問題をすべて終了しました！")
         if st.button("リストを更新して最初からやり直す", type="primary"):
